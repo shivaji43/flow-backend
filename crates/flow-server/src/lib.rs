@@ -10,7 +10,9 @@ use middleware::{
     auth,
     req_fn::{self, Function, ReqFn},
 };
+use rand::thread_rng;
 use serde::Deserialize;
+use serde_with::serde_as;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use std::{path::PathBuf, rc::Rc};
 use url::Url;
@@ -141,6 +143,7 @@ fn default_db_config() -> Either<DbConfig, ProxiedDbConfig> {
     })
 }
 
+#[serde_as]
 #[derive(Deserialize)]
 pub struct Config {
     #[serde(default = "Config::default_host")]
@@ -158,6 +161,9 @@ pub struct Config {
     pub shutdown_timeout_secs: u16,
     pub helius_api_key: Option<String>,
     pub solana: Option<SolanaConfig>,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    #[serde(default = "Config::default_secret_key")]
+    pub iroh_secret_key: iroh::SecretKey,
 
     #[serde(skip)]
     blake3_key: [u8; blake3::KEY_LEN],
@@ -183,6 +189,7 @@ impl Default for Config {
             blake3_key: rand::random(),
             solana: None,
             helius_api_key: None,
+            iroh_secret_key: iroh::SecretKey::generate(&mut thread_rng()),
         }
     }
 }
@@ -202,6 +209,10 @@ impl Config {
 
     pub const fn default_shutdown_timeout_secs() -> u16 {
         1
+    }
+
+    pub fn default_secret_key() -> iroh::SecretKey {
+        iroh::SecretKey::generate(&mut thread_rng())
     }
 
     pub fn get_config() -> Self {
@@ -422,7 +433,7 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_generate_keypair() {
         tracing_subscriber::fmt::try_init().ok();
         let json = include_str!("../../../test_files/generate_keypair.json");
@@ -457,7 +468,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_const_form_data() {
         tracing_subscriber::fmt::try_init().ok();
         let json = include_str!("../../../test_files/const_form_data.json");
@@ -480,7 +491,7 @@ mod tests {
         // TODO: check output values
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_foreach() {
         tracing_subscriber::fmt::try_init().ok();
         let json = include_str!("../../../test_files/foreach.json");
@@ -506,7 +517,7 @@ mod tests {
         ].to_vec()));
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_file_upload() {
         tracing_subscriber::fmt::try_init().ok();
         let json = include_str!("../../../test_files/file_upload.json");
@@ -528,7 +539,7 @@ mod tests {
         dbg!(res);
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_flow_input() {
         tracing_subscriber::fmt::try_init().ok();
         let json = include_str!("../../../test_files/HTTP Request.json");
