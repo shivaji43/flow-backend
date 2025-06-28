@@ -3,7 +3,7 @@ use crate::{prelude::*, utils::ui_amount_to_amount};
 use solana_commitment_config::CommitmentConfig;
 use solana_program::instruction::Instruction;
 use solana_program::program_pack::Pack;
-use solana_program::system_program;
+use solana_sdk_ids::system_program;
 use spl_associated_token_account::instruction;
 use spl_token::instruction::transfer_checked;
 use tracing::info;
@@ -184,9 +184,9 @@ pub struct Output {
     pub signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let (instructions, recipient_token_account) = command_transfer_token(
-        &ctx.solana_client(),
+        ctx.solana_client(),
         &input.fee_payer.pubkey(),
         input.mint_account,
         input.amount,
@@ -207,7 +207,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions,
     };
 
-    let instructions = input.submit.then_some(ins).unwrap_or_default();
+    let instructions = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

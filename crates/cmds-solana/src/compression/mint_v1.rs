@@ -51,7 +51,7 @@ pub struct Output {
     leaf_hash: Option<Bytes>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let mint_ix = MintV1Builder::new()
         .leaf_delegate(input.leaf_delegate.unwrap_or(input.leaf_owner))
         .leaf_owner(input.leaf_owner)
@@ -69,7 +69,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [mint_ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

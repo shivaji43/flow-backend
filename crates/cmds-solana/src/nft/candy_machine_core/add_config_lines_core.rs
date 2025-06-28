@@ -38,7 +38,7 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let accounts = mpl_core_candy_machine_core::client::accounts::AddConfigLines {
         candy_machine: input.candy_machine,
         authority: input.authority.pubkey(),
@@ -63,7 +63,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         .into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

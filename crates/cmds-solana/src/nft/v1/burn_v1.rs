@@ -37,7 +37,7 @@ pub struct Output {
     pub signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let (metadata_account, _) = Metadata::find_pda(&input.mint_account);
 
     // // get associated token account pda
@@ -95,7 +95,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [create_ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

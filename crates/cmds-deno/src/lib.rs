@@ -123,7 +123,7 @@ pub async fn new(nd: &NodeData) -> Result<(Box<dyn CommandTrait>, Child), Comman
             return Err(CommandError::msg(error));
         }
     };
-    let base_url = Url::parse(&format!("http://127.0.0.1:{}", port)).unwrap();
+    let base_url = Url::parse(&format!("http://127.0.0.1:{port}")).unwrap();
     let cmd = RpcCommandClient::new(base_url, String::new(), node_data.clone());
     tokio::spawn(async move {
         while let Ok(Some(line)) = stdout.next_line().await {
@@ -141,7 +141,7 @@ mod tests {
             client::{Extra, Source, Target, TargetsForm},
             node::Definition,
         },
-        context::CommandContextX,
+        context::CommandContext,
     };
     use serde_json::Value as JsonValue;
     use uuid::Uuid;
@@ -193,7 +193,7 @@ mod tests {
         const JSON: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/add.json"));
         let nd = node_data(JSON, SOURCE);
         let (cmd, child) = new(&nd).await.unwrap();
-        let mut ctx = CommandContextX::test_context();
+        let mut ctx = CommandContext::test_context();
         ctx.extensions_mut()
             .unwrap()
             .insert(srpc::Server::start_http_server().unwrap());

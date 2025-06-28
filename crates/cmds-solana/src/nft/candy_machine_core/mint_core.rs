@@ -3,7 +3,8 @@ use crate::prelude::*;
 use anchor_lang::{InstructionData, ToAccountMetas};
 use mpl_core_candy_guard::client::args::MintV1;
 use solana_compute_budget_interface::ComputeBudgetInstruction;
-use solana_program::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
+use solana_program::{instruction::Instruction, pubkey::Pubkey, sysvar};
+use solana_sdk_ids::system_program;
 
 // Command Name
 const NAME: &str = "mint_candy_machine_core";
@@ -49,7 +50,7 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     static CANDY_MACHINE_PROGRAM_ID: Pubkey = mpl_core_candy_machine_core::ID;
     static CANDY_GUARD_PROGRAM_ID: Pubkey = mpl_core_candy_guard::ID;
     static MPL_CORE_PROGRAM_ID: Pubkey = mpl_core::ID;
@@ -111,7 +112,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         .into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

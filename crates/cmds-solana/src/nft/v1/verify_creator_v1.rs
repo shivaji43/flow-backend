@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use mpl_token_metadata::accounts::{MasterEdition, Metadata};
-use solana_program::{system_program, sysvar};
+use solana_program::sysvar;
+use solana_sdk_ids::system_program;
 
 // Command Name
 const NAME: &str = "verify_creator_v1";
@@ -38,7 +39,7 @@ pub struct Output {
     pub signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let mut collection_metadata: Option<Pubkey> = None;
     let mut collection_master_edition: Option<Pubkey> = None;
 
@@ -70,7 +71,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [ins].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

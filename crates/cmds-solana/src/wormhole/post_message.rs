@@ -3,7 +3,8 @@ use crate::{prelude::*, wormhole::WormholeInstructions};
 use borsh::{BorshDeserialize, BorshSerialize};
 use rand::Rng;
 use solana_program::pubkey::Pubkey;
-use solana_program::{instruction::AccountMeta, system_instruction, sysvar};
+use solana_program::{instruction::AccountMeta, sysvar};
+use solana_system_interface::instruction::transfer;
 
 use super::{BridgeData, PostMessageData, token_bridge::get_sequence_number_from_message};
 
@@ -40,7 +41,7 @@ pub struct Output {
     emitter: String,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let wormhole_core_program_id =
         crate::wormhole::wormhole_core_program_id(ctx.solana_config().cluster);
 
@@ -91,11 +92,7 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
 
     let message_pubkey = input.message.pubkey();
 
-    let instructions = [
-        system_instruction::transfer(&input.payer.pubkey(), &fee_collector, fee),
-        ix,
-    ]
-    .into();
+    let instructions = [transfer(&input.payer.pubkey(), &fee_collector, fee), ix].into();
 
     let ins = Instructions {
         lookup_tables: None,
@@ -104,7 +101,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions,
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

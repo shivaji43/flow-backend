@@ -4,7 +4,8 @@ use crate::prelude::*;
 use crate::utils::anchor_sighash;
 use borsh::BorshSerialize;
 use solana_program::instruction::AccountMeta;
-use solana_program::{system_program, sysvar};
+use solana_program::sysvar;
+use solana_sdk_ids::system_program;
 use spl_associated_token_account::get_associated_token_address;
 
 use super::{CreateData, CreateDataInput, FEE_ORACLE_ADDRESS, STRM_TREASURY, WITHDRAWOR_ADDRESS};
@@ -91,7 +92,7 @@ fn create_create_stream_instruction(
     }
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let timelock_program = crate::streamflow::streamflow_program_id(ctx.solana_config().cluster);
 
     let data: CreateData = input.data.into();
@@ -143,7 +144,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: vec![instruction],
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

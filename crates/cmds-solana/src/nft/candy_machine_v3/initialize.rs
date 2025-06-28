@@ -3,7 +3,8 @@ use crate::{
     prelude::*,
 };
 use anchor_lang::{InstructionData, ToAccountMetas};
-use solana_program::{instruction::Instruction, system_instruction, system_program};
+use solana_program::{instruction::Instruction, system_instruction, };
+use solana_sdk_ids::system_program;
 use solana_program::pubkey::Pubkey;
 
 use mpl_candy_machine_core::{instruction::InitializeV2, CandyMachineData};
@@ -62,7 +63,7 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let token_metadata_program = mpl_token_metadata::ID;
     let candy_machine_program = mpl_candy_machine_core::id();
     let candy_pubkey = input.candy_machine.pubkey();

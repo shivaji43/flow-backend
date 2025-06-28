@@ -43,7 +43,7 @@ struct Output {
     response: JsonValue,
 }
 
-async fn run(ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let content_type = "application/json";
 
     // get time
@@ -83,7 +83,7 @@ async fn run(ctx: CommandContextX, input: Input) -> Result<Output, CommandError>
             let response = resp.json().await?;
             Ok(Output { response })
         }
-        code => Err(CommandError::msg(format!("{} {:?}", code, resp))),
+        code => Err(CommandError::msg(format!("{code} {resp:?}"))),
     }
 }
 

@@ -2,7 +2,8 @@ use super::{PostVAAData, VAA};
 use crate::{prelude::*, wormhole::WormholeInstructions};
 use borsh::BorshSerialize;
 use solana_program::pubkey::Pubkey;
-use solana_program::{instruction::AccountMeta, system_program, sysvar};
+use solana_program::{instruction::AccountMeta, sysvar};
+use solana_sdk_ids::system_program;
 
 // Command Name
 const NAME: &str = "post_vaa";
@@ -38,7 +39,7 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let wormhole_core_program_id =
         crate::wormhole::wormhole_core_program_id(ctx.solana_config().cluster);
     let bridge = Pubkey::find_program_address(&[b"Bridge"], &wormhole_core_program_id).0;
@@ -79,7 +80,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

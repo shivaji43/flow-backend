@@ -1,7 +1,8 @@
 use crate::prelude::*;
 use anchor_lang::{InstructionData, ToAccountMetas};
 use mpl_candy_guard::instruction::Initialize;
-use solana_program::{instruction::Instruction, system_program};
+use solana_program::{instruction::Instruction, };
+use solana_sdk_ids::system_program;
 use solana_program::pubkey::Pubkey;
 
 // Command Name
@@ -40,7 +41,7 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let candy_guard_program = mpl_candy_guard::id();
 
     let base_pubkey = input.base.pubkey();

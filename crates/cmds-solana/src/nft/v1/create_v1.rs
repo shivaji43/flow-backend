@@ -4,7 +4,8 @@ use mpl_token_metadata::{
     instructions::CreateV1InstructionArgs,
     types::Collection,
 };
-use solana_program::{system_program, sysvar};
+use solana_program::sysvar;
+use solana_sdk_ids::system_program;
 
 use crate::nft::{
     CollectionDetails, NftCollection, NftCreator, NftDataV2, NftUses, PrintSupply, TokenStandard,
@@ -55,7 +56,7 @@ pub struct Output {
     pub signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let (metadata_account, _) = Metadata::find_pda(&input.mint_account.pubkey());
 
     let (master_edition_account, _) = MasterEdition::find_pda(&input.mint_account.pubkey());
@@ -154,7 +155,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [create_ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

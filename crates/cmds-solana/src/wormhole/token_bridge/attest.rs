@@ -3,7 +3,8 @@ use crate::prelude::*;
 use borsh::BorshSerialize;
 use rand::Rng;
 use solana_program::pubkey::Pubkey;
-use solana_program::{instruction::AccountMeta, system_program, sysvar};
+use solana_program::{instruction::AccountMeta, sysvar};
+use solana_sdk_ids::system_program;
 
 use super::{AttestTokenData, TokenBridgeInstructions, get_sequence_number_from_message};
 
@@ -40,7 +41,7 @@ pub struct Output {
     sequence: String,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let wormhole_core_program_id =
         crate::wormhole::wormhole_core_program_id(ctx.solana_config().cluster);
 
@@ -115,7 +116,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use solana_program::{instruction::AccountMeta, system_program, sysvar};
+use solana_program::{instruction::AccountMeta, sysvar};
+use solana_sdk_ids::system_program;
 use tracing::info;
 
 use crate::prelude::*;
@@ -174,7 +175,7 @@ pub fn create_realm(
     (instruction, realm_address, community_token_holding_address)
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let program_id = Pubkey::from_str(SPL_GOVERNANCE_ID).unwrap();
 
     let (ix, realm, community_token) = create_realm(

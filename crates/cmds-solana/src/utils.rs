@@ -63,7 +63,7 @@ pub fn tx_to_string(tx: &Transaction) -> Result<String, bincode::Error> {
 }
 
 pub async fn try_sign_wallet(
-    ctx: &mut CommandContextX,
+    ctx: &mut CommandContext,
     tx: &mut Transaction,
     wallet: &Wallet,
     recent_blockhash: Hash,
@@ -88,7 +88,7 @@ pub async fn try_sign_wallet(
 //
 pub fn anchor_sighash(name: &str) -> [u8; 8] {
     let namespace = "global";
-    let preimage = format!("{}:{}", namespace, name);
+    let preimage = format!("{namespace}:{name}");
     let mut sighash = [0u8; 8];
     sighash.copy_from_slice(
         &anchor_lang::solana_program::hash::hash(preimage.as_bytes()).to_bytes()[..8],

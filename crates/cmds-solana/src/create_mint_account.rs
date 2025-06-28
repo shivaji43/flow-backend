@@ -1,6 +1,7 @@
 use crate::prelude::*;
 use solana_program::program_pack::Pack;
-use solana_program::system_instruction;
+use solana_system_interface::instruction::create_account;
+
 use spl_token::state::Mint;
 
 const NAME: &str = "create_mint_account";
@@ -38,14 +39,14 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let lamports = ctx
         .solana_client()
         .get_minimum_balance_for_rent_exemption(Mint::LEN)
         .await?;
 
     let instructions = [
-        system_instruction::create_account(
+        create_account(
             &input.fee_payer.pubkey(),
             &input.mint_account.pubkey(),
             lamports,
@@ -70,7 +71,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions,
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 
