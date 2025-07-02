@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use solana_program::{instruction::AccountMeta, system_program, sysvar};
+use solana_program::{instruction::AccountMeta, sysvar};
+use solana_sdk_ids::system_program;
 
 use crate::prelude::*;
 
@@ -92,7 +93,7 @@ pub fn insert_transaction(
     (instruction, proposal_transaction_address)
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let program_id = Pubkey::from_str(SPL_GOVERNANCE_ID).unwrap();
 
     let (ix, proposal_transaction_address) = insert_transaction(

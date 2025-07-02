@@ -3,6 +3,7 @@ use actix::{
     Actor, ActorContext, ActorFutureExt, Arbiter, AsyncContext, Context, ResponseActFuture,
     ResponseFuture, WrapFuture, fut::wrap_future,
 };
+use command_rpc::flow_side::address_book::BaseAddressBook;
 use db::{
     FlowRunLogsRow,
     pool::{DbPool, ProxiedDbPool, RealDbPool},
@@ -14,7 +15,10 @@ use flow_lib::{
 };
 use futures_channel::mpsc;
 use futures_util::{FutureExt, StreamExt};
+use serde::Serialize;
+use n0_watcher::Disconnected;
 use std::{
+    net::SocketAddr,
     sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
@@ -22,6 +26,7 @@ use tokio::sync::broadcast;
 use tracing::{Span, level_filters::LevelFilter};
 use tracing_subscriber::EnvFilter;
 use utils::address_book::{AddressBook, AlreadyStarted, ManagableActor};
+use iroh::Watcher;
 
 pub mod flow_run_worker;
 pub mod messages;
@@ -59,15 +64,57 @@ pub struct DBWorker {
     tx: mpsc::UnboundedSender<Vec<FlowRunLogsRow>>,
     done_tx: broadcast::Sender<()>,
     new_flow_api_request: NewRequestService,
+    remote_command_address_book: BaseAddressBook,
 }
 
+#[derive(Serialize)]
+pub struct IrohInfo {
+    pub node_id: String,
+    pub relay_url: String,
+    pub direct_addresses: Vec<SocketAddr>,
+}
+
+pub struct GetIrohInfo;
+
+impl actix::Message for GetIrohInfo {
+    type Result = Result<IrohInfo, Disconnected>;
+}
+
+impl actix::Handler<GetIrohInfo> for DBWorker {
+    type Result = ResponseFuture<<GetIrohInfo as actix::Message>::Result>;
+
+    fn handle(&mut self, _: GetIrohInfo, _: &mut Self::Context) -> Self::Result {
+        let endpoint = self.remote_command_address_book.endpoint().clone();
+        Box::pin(async move {
+            let node_id = endpoint.node_id().to_string();
+            let relay_url = endpoint.home_relay().initialized().await?.to_string();
+            let direct_addresses = endpoint
+                .direct_addresses()
+                .initialized()
+                .await?
+                .into_iter()
+                .map(|addr| addr.addr)
+                .collect();
+
+            Ok(IrohInfo {
+                node_id,
+                relay_url,
+                direct_addresses,
+            })
+        })
+    }
+}
+
+#[bon::bon]
 impl DBWorker {
+    #[builder]
     pub fn new(
         db: DbPool,
         config: &Config,
         actors: AddressBook,
         tracing_data: flow_logs::Map,
         new_flow_api_request: NewRequestService,
+        remote_command_address_book: BaseAddressBook,
         ctx: &mut actix::Context<Self>,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded();
@@ -93,7 +140,19 @@ impl DBWorker {
             tracing_data,
             done_tx: broadcast::channel(1).0,
             new_flow_api_request,
+            remote_command_address_book,
         }
+    }
+}
+
+impl actix::SystemService for DBWorker {}
+
+impl actix::Supervised for DBWorker {}
+
+// required in Supervised trait
+impl Default for DBWorker {
+    fn default() -> Self {
+        unimplemented!();
     }
 }
 
@@ -177,17 +236,25 @@ impl actix::Message for GetUserWorker {
 
 impl actix::Handler<GetUserWorker> for DBWorker {
     type Result = actix::Addr<UserWorker>;
-    fn handle(&mut self, msg: GetUserWorker, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: GetUserWorker, _: &mut Self::Context) -> Self::Result {
         let id = msg.user_id;
         self.actors.get_or_start(id, {
             let counter = self.counter.clone();
             let db = self.db.clone();
-            let root = ctx.address();
             let endpoints = self.endpoints.clone();
             let new_flow_api_request = self.new_flow_api_request.clone();
+            let remote_command_address_book = self.remote_command_address_book.clone();
+            let arbiter = Arbiter::current();
             move || {
-                UserWorker::start_in_arbiter(&Arbiter::current(), move |_| {
-                    UserWorker::new(id, endpoints, db, counter, root, new_flow_api_request)
+                UserWorker::start_in_arbiter(&arbiter, move |_| {
+                    UserWorker::builder()
+                        .user_id(id)
+                        .endpoints(endpoints)
+                        .db(db)
+                        .counter(counter)
+                        .new_flow_api_request(new_flow_api_request)
+                        .remote_command_address_book(remote_command_address_book)
+                        .build()
                 })
             }
         })

@@ -86,7 +86,7 @@ fn create_withdraw_stream_instruction(
     }
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let timelock_program = crate::streamflow::streamflow_program_id(ctx.solana_config().cluster);
 
     let data: WithdrawData = input.data.into();
@@ -158,7 +158,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: vec![instruction],
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

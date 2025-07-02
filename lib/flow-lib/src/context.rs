@@ -271,6 +271,30 @@ pub mod execute {
         pub output: value::Map,
     }
 
+    impl bincode::Encode for Request {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.instructions.encode(encoder)?;
+            value::bincode_impl::MapBincode::from(&self.output).encode(encoder)?;
+            Ok(())
+        }
+    }
+
+    impl<C> bincode::Decode<C> for Request {
+        fn decode<D: bincode::de::Decoder<Context = C>>(
+            decoder: &mut D,
+        ) -> Result<Self, bincode::error::DecodeError> {
+            Ok(Self {
+                instructions: Instructions::decode(decoder)?,
+                output: value::bincode_impl::MapBincode::decode(decoder)?
+                    .0
+                    .into_owned(),
+            })
+        }
+    }
+
     #[serde_as]
     #[derive(Deserialize)]
     struct RequestRepr {
@@ -294,6 +318,27 @@ pub mod execute {
     pub struct Response {
         #[serde_as(as = "Option<DisplayFromStr>")]
         pub signature: Option<Signature>,
+    }
+
+    impl bincode::Encode for Response {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.signature.map(|s| *s.as_array()).encode(encoder)?;
+            Ok(())
+        }
+    }
+
+    impl<C> bincode::Decode<C> for Response {
+        fn decode<D: bincode::de::Decoder<Context = C>>(
+            decoder: &mut D,
+        ) -> Result<Self, bincode::error::DecodeError> {
+            let value = Option::<[u8; 64]>::decode(decoder)?;
+            Ok(Self {
+                signature: value.map(Signature::from),
+            })
+        }
     }
 
     fn unwrap(s: &Option<String>) -> &str {
@@ -431,7 +476,7 @@ pub struct CommandContextData {
     pub flow: FlowContextData,
 }
 
-#[derive(Clone)]
+#[derive(Clone, bon::Builder)]
 pub struct FlowSetServices {
     pub http: reqwest::Client,
     pub solana_client: Arc<SolanaClient>,
@@ -439,24 +484,24 @@ pub struct FlowSetServices {
     pub api_input: api_input::Svc,
 }
 
-#[derive(Clone)]
+#[derive(Clone, bon::Builder)]
 pub struct FlowServices {
     pub signer: signer::Svc,
     pub set: FlowSetServices,
 }
 
 #[derive(Clone, bon::Builder)]
-pub struct CommandContextX {
+pub struct CommandContext {
     data: CommandContextData,
     execute: execute::Svc,
     get_jwt: get_jwt::Svc,
     flow: FlowServices,
 }
 
-impl CommandContextX {
+impl CommandContext {
     pub fn test_context() -> Self {
         let config = ContextConfig::default();
-        let solana_client = Arc::new(config.solana_client.build_client());
+        let solana_client = Arc::new(config.solana_client.build_client(None));
         Self {
             data: CommandContextData {
                 node_id: NodeId::nil(),
@@ -589,8 +634,7 @@ impl CommandContextX {
         message: Bytes,
         timeout: Duration,
     ) -> Result<signer::SignatureResponse, signer::Error> {
-        Ok(self
-            .flow
+        self.flow
             .signer
             .ready()
             .await?
@@ -603,7 +647,7 @@ impl CommandContextX {
                 flow_run_id: Some(self.data.flow.flow_run_id),
                 signatures: None,
             })
-            .await?)
+            .await
     }
 
     /// Get an extension by type.
@@ -636,7 +680,7 @@ pub struct RawContext<'a> {
     pub services: RawServices<'a>,
 }
 
-impl Default for CommandContextX {
+impl Default for CommandContext {
     fn default() -> Self {
         Self::test_context()
     }

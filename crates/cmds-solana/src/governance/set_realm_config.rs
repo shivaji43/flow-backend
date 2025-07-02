@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use solana_program::{instruction::AccountMeta, system_program};
+use solana_program::instruction::AccountMeta;
+use solana_sdk_ids::system_program;
 use tracing::info;
 
 use crate::{
@@ -121,7 +122,7 @@ pub fn set_realm_config(
     }
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let program_id = Pubkey::from_str(SPL_GOVERNANCE_ID).unwrap();
 
     let ix = set_realm_config(

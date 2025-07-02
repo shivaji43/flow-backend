@@ -51,7 +51,7 @@ impl ProxiedUserConn {
             .access_token;
         self.client
             .post(self.push_logs_url.clone())
-            .header(AUTHORIZATION, &format!("Bearer {}", jwt))
+            .header(AUTHORIZATION, &format!("Bearer {jwt}"))
             .json(&rows)
             .send()
             .await
@@ -81,7 +81,7 @@ impl ProxiedUserConn {
         let result = self
             .client
             .post(self.rpc_url.clone())
-            .header(AUTHORIZATION, &format!("Bearer {}", jwt))
+            .header(AUTHORIZATION, &format!("Bearer {jwt}"))
             .json(&RpcRequest { method, params })
             .send()
             .await
@@ -93,7 +93,7 @@ impl ProxiedUserConn {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl UserConnectionTrait for ProxiedUserConn {
     async fn get_wallet_by_pubkey(&self, _: &[u8; 32]) -> crate::Result<Wallet> {
         // TODO
@@ -115,7 +115,7 @@ impl UserConnectionTrait for ProxiedUserConn {
         Err(crate::Error::NotSupported)
     }
 
-    async fn get_deployment_wallets(&self, _: &DeploymentId) -> crate::Result<Vec<i64>> {
+    async fn get_deployment_wallets(&self, _: &DeploymentId) -> crate::Result<BTreeSet<i64>> {
         // TODO
         Err(crate::Error::NotSupported)
     }
@@ -406,7 +406,7 @@ impl UserConnection {
                 let res = self.export_user_data().await?;
                 Ok(serde_json::value::to_raw_value(&res)?)
             }
-            name => Err(format!("unknown method: {}", name).into()),
+            name => Err(format!("unknown method: {name}").into()),
         }
     }
 }

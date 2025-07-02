@@ -2,6 +2,8 @@ use super::Error;
 use super::{Pubkey, Signature};
 use crate::context::signer::Presigner;
 use crate::utils::tower_client::CommonErrorExt;
+use agave_feature_set::FeatureSet;
+use agave_precompiles::verify_if_precompile;
 use anyhow::{anyhow, bail};
 use base64::prelude::*;
 use nom::{
@@ -11,8 +13,6 @@ use nom::{
 };
 use solana_address_lookup_table_interface::state::AddressLookupTable;
 use solana_clock::{Slot, UnixTimestamp};
-use solana_feature_set::FeatureSet;
-use solana_precompiles::verify_if_precompile;
 use solana_program::message::AddressLookupTableAccount;
 use solana_rpc_client::nonblocking::rpc_client::RpcClient;
 use solana_rpc_client_api::{
@@ -112,7 +112,7 @@ pub fn verbose_solana_error(err: &ClientError) -> String {
     }) = &err.kind
     {
         let mut s = String::new();
-        writeln!(s, "{} ({})", message, code).unwrap();
+        writeln!(s, "{message} ({code})").unwrap();
         if let RpcResponseErrorData::SendTransactionPreflightFailure(
             RpcSimulateTransactionResult {
                 logs: Some(logs), ..
@@ -152,7 +152,7 @@ pub async fn get_and_parse_transaction(
     };
 
     let tx_bytes = BASE64_STANDARD.decode(&tx_base64).map_err(Error::other)?;
-    let tx: Transaction = bincode::deserialize(&tx_bytes).map_err(Error::other)?;
+    let tx: Transaction = bincode1::deserialize(&tx_bytes).map_err(Error::other)?;
 
     Ok(TransactionWithMeta {
         slot: result.slot,

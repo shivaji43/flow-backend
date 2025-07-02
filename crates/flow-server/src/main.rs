@@ -1,9 +1,10 @@
-use actix::{Actor, AsyncContext};
+use actix::{Actor, AsyncContext, SystemRegistry};
 use actix_web::{
     App, HttpServer,
     middleware::{Compress, Logger},
     web,
 };
+use command_rpc::flow_side::address_book::BaseAddressBook;
 use db::{
     LocalStorage, WasmStorage,
     pool::{DbPool, ProxiedDbPool, RealDbPool},
@@ -23,13 +24,16 @@ use flow_server::{
     ws,
 };
 use futures_util::{TryFutureExt, future::ok};
-use std::{borrow::Cow, collections::BTreeSet, convert::Infallible, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, convert::Infallible, sync::Arc, time::Duration};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 use utils::address_book::AddressBook;
 
 // avoid commands being optimized out by the compiler
+#[cfg(feature = "commands")]
 use cmds_pdg as _;
+#[cfg(feature = "commands")]
 use cmds_solana as _;
+#[cfg(feature = "commands")]
 use cmds_std as _;
 
 #[actix::main]
@@ -52,8 +56,8 @@ async fn main() {
         }
     }
 
-    let fac = flow::context::CommandFactory::new();
-    let natives = fac.natives.keys().collect::<Vec<_>>();
+    let fac = flow::context::CommandFactory::new(None);
+    let natives = fac.availables().collect::<Vec<_>>();
     tracing::info!("native commands: {:?}", natives);
 
     tracing::info!("allow CORS origins: {:?}", config.cors_origins);
@@ -122,9 +126,7 @@ async fn main() {
                 let names = conn.get_natives_commands().await?;
                 let mut missing = BTreeSet::new();
                 for name in names {
-                    if !natives.contains(&&Cow::Borrowed(name.as_str()))
-                        && !rhai_script::is_rhai_script(&name)
-                    {
+                    if !natives.contains(&name.as_str()) && !rhai_script::is_rhai_script(&name) {
                         missing.insert(name);
                     }
                 }
@@ -145,20 +147,31 @@ async fn main() {
 
     let store = RequestStore::new_app_data();
 
+    let base_book = BaseAddressBook::new(command_rpc::flow_side::address_book::ServerConfig {
+        secret_key: config.iroh_secret_key.clone(),
+    })
+    .await
+    .unwrap();
+
+    tracing::info!("iroh node ID: {}", config.iroh_secret_key.public());
+
     let db_worker = DBWorker::create(|ctx| {
-        DBWorker::new(
-            db.clone(),
-            &config,
-            actors,
-            tracing_data,
-            NewRequestService {
+        DBWorker::builder()
+            .config(&config)
+            .db(db.clone())
+            .actors(actors)
+            .tracing_data(tracing_data)
+            .new_flow_api_request(NewRequestService {
                 store: store.clone(),
                 db_worker: ctx.address(),
                 endpoints: config.endpoints(),
-            },
-            ctx,
-        )
+            })
+            .remote_command_address_book(base_book)
+            .ctx(ctx)
+            .build()
     });
+
+    SystemRegistry::set(db_worker.clone());
 
     let sig_auth = config.signature_auth();
     let supabase_auth = match SupabaseAuth::new(&config.supabase, db.clone()) {

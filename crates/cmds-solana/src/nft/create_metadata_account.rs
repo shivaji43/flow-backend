@@ -2,7 +2,7 @@ use super::{CollectionDetails, NftDataV2};
 use crate::prelude::*;
 use mpl_token_metadata::accounts::Metadata;
 use solana_program::pubkey::Pubkey;
-use solana_program::system_program;
+use solana_sdk_ids::system_program;
 
 // Command Name
 const NAME: &str = "create_metadata_account";
@@ -41,7 +41,7 @@ pub struct Output {
     signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let (metadata_account, _) = Metadata::find_pda(&input.mint_account);
 
     let create_ix = mpl_token_metadata::instructions::CreateMetadataAccountV3 {
@@ -71,7 +71,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [ins].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

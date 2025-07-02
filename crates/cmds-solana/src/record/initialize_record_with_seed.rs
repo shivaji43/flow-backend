@@ -1,7 +1,7 @@
-use solana_program::{instruction::AccountMeta, rent::Rent, system_instruction};
-
 use crate::prelude::*;
 use crate::utils::pod_get_packed_len;
+use solana_program::{instruction::AccountMeta, rent::Rent};
+use solana_system_interface::instruction::create_account_with_seed;
 
 use super::{RecordData, RecordInstruction, record_program_id};
 
@@ -38,7 +38,7 @@ pub struct Output {
     account: Pubkey,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let record_program_id = record_program_id(ctx.solana_config().cluster);
 
     let account =
@@ -51,7 +51,7 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         .checked_add(data.len())
         .unwrap();
 
-    let create_account_instruction = system_instruction::create_account_with_seed(
+    let create_account_instruction = create_account_with_seed(
         &input.fee_payer.pubkey(),
         &account,
         &input.authority.pubkey(),
@@ -96,7 +96,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         .into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(ins, value::map! { "account" => account })

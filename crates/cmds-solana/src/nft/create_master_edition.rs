@@ -3,7 +3,7 @@ use mpl_token_metadata::{
     accounts::{MasterEdition, Metadata},
     instructions::CreateMasterEditionV3InstructionArgs,
 };
-use solana_program::system_program;
+use solana_sdk_ids::system_program;
 
 // Command Name
 const NAME: &str = "create_master_edition";
@@ -40,7 +40,7 @@ pub struct Output {
     pub signature: Option<Signature>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let (metadata_account, _) = Metadata::find_pda(&input.mint_account);
 
     let (master_edition_account, _) = MasterEdition::find_pda(&input.mint_account);
@@ -70,7 +70,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [create_ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx
         .execute(

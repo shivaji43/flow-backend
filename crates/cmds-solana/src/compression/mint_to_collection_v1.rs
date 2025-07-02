@@ -61,7 +61,7 @@ pub struct Output {
     leaf_hash: Option<Bytes>,
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     // Bubblegum address if none is provided
     // TODO update to MetadataDelegateRecord::find_pda
     let collection_authority_record_pda = input.is_delegate_authority.then_some(
@@ -121,7 +121,11 @@ async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandEr
         instructions: [mint_ix].into(),
     };
 
-    let ins = input.submit.then_some(ins).unwrap_or_default();
+    let ins = if input.submit {
+        ins
+    } else {
+        Default::default()
+    };
 
     let signature = ctx.execute(ins, <_>::default()).await?.signature;
 

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
-use solana_program::{instruction::AccountMeta, system_program};
+use solana_program::instruction::AccountMeta;
+use solana_sdk_ids::system_program;
 use tracing::info;
 
 use crate::prelude::*;
@@ -96,7 +97,7 @@ pub fn deposit_governing_tokens(
     )
 }
 
-async fn run(mut ctx: CommandContextX, input: Input) -> Result<Output, CommandError> {
+async fn run(mut ctx: CommandContext, input: Input) -> Result<Output, CommandError> {
     let program_id = Pubkey::from_str(SPL_GOVERNANCE_ID).unwrap();
 
     let governing_token_source = spl_associated_token_account::get_associated_token_address(

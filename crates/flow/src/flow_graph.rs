@@ -14,7 +14,7 @@ use flow_lib::{
     command::{CommandError, CommandTrait, InstructionInfo},
     config::client::{self, PartialConfig},
     context::{
-        CommandContextData, CommandContextX, FlowContextData, FlowServices, FlowSetContextData,
+        CommandContext, CommandContextData, FlowContextData, FlowServices, FlowSetContextData,
         FlowSetServices, execute, get_jwt,
     },
     solana::{ExecutionConfig, Instructions, Pubkey, Wallet, find_failed_instruction},
@@ -48,12 +48,11 @@ use std::{
 };
 use thiserror::Error as ThisError;
 use tokio::{
-    process::Child,
     sync::Semaphore,
     task::{JoinError, JoinHandle},
 };
 use tokio_util::sync::CancellationToken;
-use tower::{Service, ServiceExt};
+use tower::{Service, ServiceExt, service_fn};
 use tracing::Instrument;
 use uuid::Uuid;
 use value::Value;
@@ -130,7 +129,6 @@ pub struct FlowGraph {
     pub action_identity: Option<Pubkey>,
     pub rhai_permit: Arc<Semaphore>,
     pub tx_exec_config: ExecutionConfig,
-    pub spawned: Vec<Child>,
     pub parent_flow_execute: Option<execute::Svc>,
     pub fees: Vec<(Pubkey, u64)>,
 }
@@ -384,9 +382,8 @@ impl FlowGraph {
             .unwrap_or_default();
         let parent_flow_execute = registry.parent_flow_execute.clone();
         tracing::debug!("execution config: {:?}", tx_exec_config);
-        let get_jwt = registry.token.clone();
+        let get_jwt = registry.backend.token.clone();
 
-        // let ctx = Context::from_cfg(&c.ctx, flow_owner, started_by, signer, token, ext);
         let ctx_data = FlowContextData {
             environment: c.ctx.environment,
             flow_run_id: FlowRunId::nil(),
@@ -400,27 +397,33 @@ impl FlowGraph {
             },
         };
         let ctx_svcs = FlowServices {
-            signer: registry.signer.clone(),
+            signer: registry.backend.signer.clone(),
             set: FlowSetServices {
-                api_input: registry.api_input.clone(),
+                api_input: registry.backend.api_input.clone(),
                 extensions: Arc::new({
                     let mut ext = Extensions::new();
                     if let Some(rpc) = registry.rpc_server.clone() {
                         ext.insert(rpc);
                     }
-                    ext.insert(registry);
+                    ext.insert(registry.make_run_rhai_svc());
+                    ext.insert(registry.make_start_flow_svc());
                     ext.insert(tokio::runtime::Handle::current());
                     ext
                 }),
-                http: reqwest::Client::new(),
-                solana_client: Arc::new(ctx_data.set.solana.build_client()),
+                http: registry.http.clone(),
+                // TODO: re-use reqwest client
+                solana_client: Arc::new(
+                    ctx_data
+                        .set
+                        .solana
+                        .build_client(Some(registry.http.clone())),
+                ),
             },
         };
 
-        let f = CommandFactory::new();
+        let mut f = CommandFactory::new(registry.remotes);
 
         let mut g = StableGraph::new();
-        let mut spawned = Vec::new();
 
         let mut mocks = HashSet::new();
         let mut nodes = HashMap::new();
@@ -446,9 +449,7 @@ impl FlowGraph {
                 }
                 continue;
             }
-            let command = f
-                .new_command(&n.command_name, &n.client_node_data, &mut spawned)
-                .await?;
+            let command = f.new_command(&n.command_name, &n.client_node_data).await?;
             let id = n.id;
             let idx = g.add_node(id);
             let node = Node {
@@ -547,7 +548,6 @@ impl FlowGraph {
             fees: Vec::new(),
             rhai_permit,
             tx_exec_config,
-            spawned,
             parent_flow_execute,
         })
     }
@@ -1009,7 +1009,7 @@ impl FlowGraph {
                         &mut s.result,
                         node.id,
                         times,
-                        format!("output not found: {:?}", missing),
+                        format!("output not found: {missing:?}"),
                     );
                 }
 
@@ -1334,7 +1334,7 @@ impl FlowGraph {
                             .map(|id| {
                                 let name =
                                     self.nodes.get(id).expect("node not found").command.name();
-                                format!("{}:{}", id, name)
+                                format!("{id}:{name}")
                             })
                             .collect::<Vec<_>>()
                     })
@@ -1342,7 +1342,7 @@ impl FlowGraph {
                 tracing::trace!("transactions: {:?}", txs);
             }
             Err(error) => {
-                s.flow_error(format!("sort_transactions failed: {}", error));
+                s.flow_error(format!("sort_transactions failed: {error}"));
                 s.stop.token.cancel();
             }
         }
@@ -1364,7 +1364,7 @@ impl FlowGraph {
                         fake_node,
                         n.idx,
                         Edge {
-                            from: format!("{}/{}", node_id, output_name),
+                            from: format!("{node_id}/{output_name}"),
                             to: input_name.clone(),
                             values: <_>::default(),
                             is_required_input,
@@ -1373,7 +1373,7 @@ impl FlowGraph {
                     );
                 } else {
                     // TODO: more diagnostic info
-                    s.flow_error(format!("no value for port {:?}", input_name));
+                    s.flow_error(format!("no value for port {input_name:?}"));
                     s.stop.token.cancel();
                 }
             }
@@ -1471,7 +1471,7 @@ impl FlowGraph {
             .filter(|(_, e)| !e.is_empty())
             .count();
         if failed > 0 {
-            s.flow_error(format!("{} nodes failed", failed));
+            s.flow_error(format!("{failed} nodes failed"));
         }
 
         s.event_tx
@@ -1486,6 +1486,10 @@ impl FlowGraph {
             .ok();
 
         self.g.remove_node(fake_node);
+
+        for n in self.nodes.values_mut() {
+            n.command.destroy().await;
+        }
 
         s.result
     }
@@ -1593,7 +1597,7 @@ impl FlowGraph {
             .tx_exec_config(self.tx_exec_config.clone())
             .get_jwt(self.get_jwt.clone())
             .call();
-        let handler = tokio::spawn(
+        let handler = tokio::task::spawn_local(
             async move {
                 if is_rhai_script {
                     let p = rhai_permit.acquire().await;
@@ -1721,7 +1725,7 @@ async fn run_command(
     inputs: value::Map,
     ctx_data: FlowContextData,
     ctx_svcs: FlowServices,
-    get_jwt: get_jwt::Svc,
+    mut get_jwt: get_jwt::Svc,
     event_tx: EventSender,
     stop: StopSignal,
     stop_shared: StopSignal,
@@ -1753,9 +1757,13 @@ async fn run_command(
             tx: tx.clone(),
         }),
     };
-    if !node.command.permissions().user_tokens {}
+    if !node.command.permissions().user_tokens {
+        get_jwt = get_jwt::Svc::new(service_fn(|_| {
+            std::future::ready(Err(get_jwt::Error::NotAllowed))
+        }));
+    }
 
-    let ctx = CommandContextX::builder()
+    let ctx = CommandContext::builder()
         .data(CommandContextData {
             flow: ctx_data,
             node_id: node.id,
@@ -1902,7 +1910,7 @@ mod tests {
         assert_eq!(error, "second");
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_foreach_nested() {
         let json = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -1937,7 +1945,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[actix::test]
     async fn test_uneven_loop() {
         let json = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
